@@ -14,6 +14,15 @@ spec:
   # currently running reconciliation (optional; default=false)
   paused: true
 
+  # specifies that app should be deployed to some cluster (optional)
+  cluster:
+    # specifies secret containing kubeconfig (required)
+    kubeconfigSecretRef:
+      # specifies secret name within app's namespace (required)
+      name: cluster1
+      # specifies key that contains kubeconfig (optional)
+      key: value
+
   # Fetch must have one or more directives
   fetch:
     # pull content from within this resource; or other resources in the cluster

@@ -24,13 +24,26 @@ func NewKapp(opts v1alpha1.AppDeployKapp, genericOpts GenericOpts, cancelCh chan
 }
 
 func (a *Kapp) Deploy(tplOutput string, changedFunc func(exec.CmdRunResult)) exec.CmdRunResult {
-	args := a.addDeployArgs([]string{"deploy", "-n", a.genericOpts.Namespace, "-a", a.managedName(), "-f", "-", "-y"})
+	kubeconfigYAML, err := a.genericOpts.KubeconfigYAML()
+	if err != nil {
+		result := exec.CmdRunResult{}
+		result.AttachErrorf("Deploying: %s", err)
+		return result
+	}
+
+	args := a.addDeployArgs([]string{
+		"deploy",
+		"-n", a.genericOpts.Namespace,
+		"-a", a.managedName(),
+		"--kubeconfig-yaml", kubeconfigYAML,
+		"-f", "-", "-y",
+	})
 
 	cmd := goexec.Command("kapp", args...)
 	cmd.Stdin = strings.NewReader(tplOutput)
 	stdoutBs, stderrBs := a.trackCmdOutput(cmd, changedFunc)
 
-	err := exec.RunWithCancel(cmd, a.cancelCh)
+	err = exec.RunWithCancel(cmd, a.cancelCh)
 
 	result := exec.CmdRunResult{
 		Stdout: stdoutBs.String(),
@@ -42,12 +55,25 @@ func (a *Kapp) Deploy(tplOutput string, changedFunc func(exec.CmdRunResult)) exe
 }
 
 func (a *Kapp) Delete(changedFunc func(exec.CmdRunResult)) exec.CmdRunResult {
-	args := a.addDeleteArgs([]string{"delete", "-n", a.genericOpts.Namespace, "-a", a.managedName(), "-y"})
+	kubeconfigYAML, err := a.genericOpts.KubeconfigYAML()
+	if err != nil {
+		result := exec.CmdRunResult{}
+		result.AttachErrorf("Deleting: %s", err)
+		return result
+	}
+
+	args := a.addDeleteArgs([]string{
+		"delete",
+		"-n", a.genericOpts.Namespace,
+		"-a", a.managedName(),
+		"--kubeconfig-yaml", kubeconfigYAML,
+		"-y",
+	})
 
 	cmd := goexec.Command("kapp", args...)
 	stdoutBs, stderrBs := a.trackCmdOutput(cmd, changedFunc)
 
-	err := exec.RunWithCancel(cmd, a.cancelCh)
+	err = exec.RunWithCancel(cmd, a.cancelCh)
 
 	result := exec.CmdRunResult{
 		Stdout: stdoutBs.String(),
@@ -59,7 +85,12 @@ func (a *Kapp) Delete(changedFunc func(exec.CmdRunResult)) exec.CmdRunResult {
 }
 
 func (a *Kapp) Inspect() exec.CmdRunResult {
-	var stdoutBs, stderrBs bytes.Buffer
+	kubeconfigYAML, err := a.genericOpts.KubeconfigYAML()
+	if err != nil {
+		result := exec.CmdRunResult{}
+		result.AttachErrorf("Inspecting: %s", err)
+		return result
+	}
 
 	args := a.addInspectArgs([]string{
 		"inspect", "-n", a.genericOpts.Namespace, "-a", a.managedName(), "-t",
@@ -67,13 +98,16 @@ func (a *Kapp) Inspect() exec.CmdRunResult {
 		// to avoid resource update churn
 		// TODO is there a better way to deal with this?
 		"--filter", `{"not":{"resource":{"kinds":["PodMetrics"]}}}`,
+		"--kubeconfig-yaml", kubeconfigYAML,
 	})
+
+	var stdoutBs, stderrBs bytes.Buffer
 
 	cmd := goexec.Command("kapp", args...)
 	cmd.Stdout = &stdoutBs
 	cmd.Stderr = &stderrBs
 
-	err := exec.RunWithCancel(cmd, a.cancelCh)
+	err = exec.RunWithCancel(cmd, a.cancelCh)
 
 	result := exec.CmdRunResult{
 		Stdout: stdoutBs.String(),
